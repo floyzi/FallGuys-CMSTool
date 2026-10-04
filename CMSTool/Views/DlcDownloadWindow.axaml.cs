@@ -14,6 +14,7 @@ using System.Linq;
 using System.Media;
 using System.Net.Http;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using static FGCMSTool.Managers.LocalizationManager;
 
@@ -55,9 +56,10 @@ namespace FGCMSTool.Views
 #endif
         }
 
-        public DlcWindow(JArray? dlcImages, string? savePath)
+        public DlcWindow(JArray? dlcImages, string? savePath, CancellationTokenSource cts)
         {
             InitializeComponent();
+
 #if RELEASE_LINUX_X64
             MenuTitleTextBlock.IsVisible = false;
             MenuTitleSeparator.IsVisible = false;
@@ -66,7 +68,7 @@ namespace FGCMSTool.Views
 
             LogsControl.ItemsSource = _log;
 
-            Loaded += (sender, e) =>
+            Loaded += async (sender, e) =>
             {
                 _saveDir = savePath;
 
@@ -79,11 +81,11 @@ namespace FGCMSTool.Views
                 var images = dlcImages?.ToObject<HashSet<DlcImage>>();
 
                 if (images != null)
-                    Begin(images);
+                   await Begin(images, cts.Token);
             };
         }
 
-        async void Begin(HashSet<DlcImage>? images)
+        async Task Begin(HashSet<DlcImage>? images, CancellationToken token)
         {
             if (string.IsNullOrWhiteSpace(_saveDir)) throw new InvalidOperationException();
 
@@ -112,44 +114,53 @@ namespace FGCMSTool.Views
                 }
             };
 
-            foreach (var img in images!)
+            try
             {
-                if (img?.DlcItem?.Base == null || img.DlcItem?.Path == null)
-                    continue;
-
-                try
+                foreach (var img in images!)
                 {
-                    for (var att = 1; att <= MAX_TRIES; att++)
-                    {
-                        _log.Add(LocalizedString("dlc_cms_downloading", [processed + 1, img.Id!, att, MAX_TRIES]));
+                    token.ThrowIfCancellationRequested();
 
-                        try
+                    if (img?.DlcItem?.Base == null || img.DlcItem?.Path == null)
+                        continue;
+
+                    try
+                    {
+                        for (var att = 1; att <= MAX_TRIES; att++)
                         {
-                            await GetImage($"{img.DlcItem.Base}{img.DlcItem.Path}", img.Id);
-                            _log[^1] += $" [{LocalizedString("dlc_cms_saved")}]";
-                            break;
-                        }
-                        catch
-                        {
-                            if (att == MAX_TRIES) throw;
-                            await Task.Delay(RETRY_DELAY);
+                            _log.Add(LocalizedString("dlc_cms_downloading", [processed + 1, img.Id!, att, MAX_TRIES]));
+
+                            try
+                            {
+                                await GetImage($"{img.DlcItem.Base}{img.DlcItem.Path}", img.Id, token);
+                                _log[^1] += $" [{LocalizedString("dlc_cms_saved")}]";
+                                break;
+                            }
+                            catch
+                            {
+                                if (att == MAX_TRIES) throw;
+                                await Task.Delay(RETRY_DELAY, token);
+                            }
                         }
                     }
-                }
-                catch (Exception e)
-                {
-                    _log[^1] += $" [{LocalizedString("dlc_cms_failed")}]\n{e.Message}";
-                    failed++;
-                }
+                    catch (Exception e)
+                    {
+                        _log[^1] += $" [{LocalizedString("dlc_cms_failed")}]\n{e.Message}";
+                        failed++;
+                    }
 
-                processed++;
+                    processed++;
 
-                await Dispatcher.UIThread.InvokeAsync(() =>
-                {
-                    DownloadProgress.Value = (int)((double)processed / images.Count * 100);
-                    DownloadProgress.ProgressTextFormat = string.Format(LocalizedString("dlc_cms_progress"), processed, images.Count, failed, DownloadProgress.Percentage);
-                    DownloadProgressLog.Offset = new Vector(0, DownloadProgressLog.Extent.Height);
-                });
+                    await Dispatcher.UIThread.InvokeAsync(() =>
+                    {
+                        DownloadProgress.Value = (int)((double)processed / images.Count * 100);
+                        DownloadProgress.ProgressTextFormat = string.Format(LocalizedString("dlc_cms_progress"), processed, images.Count, failed, DownloadProgress.Percentage);
+                        DownloadProgressLog.Offset = new Vector(0, DownloadProgressLog.Extent.Height);
+                    });
+                }
+            }
+            catch (OperationCanceledException)
+            {
+
             }
 
             _log.Add(LocalizedString("dlc_cms_done"));
@@ -160,22 +171,22 @@ namespace FGCMSTool.Views
 #endif
         }
 
-        async Task GetImage(string? url, string? dlcName)
+        async Task GetImage(string? url, string? dlcName, CancellationToken token)
         {
             if (string.IsNullOrEmpty(url)) return;
 
             var ext = Path.GetExtension(url);
             using var client = new HttpClient();
-            var response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
+            var response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, token);
 
             response.EnsureSuccessStatusCode();
 
-            var stream = await response.Content.ReadAsStreamAsync();
+            var stream = await response.Content.ReadAsStreamAsync(token);
 
             var path = Path.Combine(_saveDir!, $"{(string.IsNullOrWhiteSpace(dlcName) ? Guid.NewGuid() : dlcName)}{(string.IsNullOrWhiteSpace(ext) ? ".jpeg" : ext)}");
 
             await using var output = File.Create(path);
-            await stream.CopyToAsync(output);
+            await stream.CopyToAsync(output, token);
 
             if (response.Content.Headers.LastModified.HasValue)
             {

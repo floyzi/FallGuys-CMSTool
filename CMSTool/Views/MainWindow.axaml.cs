@@ -13,6 +13,8 @@ using JsonSerializer = Newtonsoft.Json.JsonSerializer;
 using FGCMSTool.Managers;
 using static FGCMSTool.Managers.LocalizationManager;
 using Xdg.Directories;
+using System.Threading;
+
 
 
 #if RELEASE_WIN_X64 || DEBUG
@@ -224,12 +226,16 @@ namespace FGCMSTool.Views
                 Dictionary<string, object>? cmsJson = JsonConvert.DeserializeObject<Dictionary<string, object>>(Encoding.UTF8.GetString(outputJson));
                 if (cmsJson != null && cmsJson.TryGetValue("dlc_images", out object? value) && value is JArray)
                 {
-                    var dlcWindow = new DlcWindow(value as JArray, Path.Combine(DownloadedDlcImagesDir, dirName));
+                    var cts = new CancellationTokenSource();
+                    var dlcWindow = new DlcWindow(value as JArray, Path.Combine(DownloadedDlcImagesDir, dirName), cts);
                     ProgressState.Text = LocalizedString("task_dlc_cms_active_long");
                     dlcWindow.Closed += (_, _) =>
                     {
                         if (!dlcWindow.Succeed)
+                        {
                             ProgressState.Text = LocalizedString("task_dlc_cms_exit");
+                            cts.Cancel();
+                        }
                         else
                             ProgressState.Text = LocalizedString("task_dlc_cms_done");
                     };
