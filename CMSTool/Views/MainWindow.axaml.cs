@@ -12,6 +12,7 @@ using Newtonsoft.Json.Linq;
 using JsonSerializer = Newtonsoft.Json.JsonSerializer;
 using FGCMSTool.Managers;
 using static FGCMSTool.Managers.LocalizationManager;
+using Xdg.Directories;
 
 
 #if RELEASE_WIN_X64 || DEBUG
