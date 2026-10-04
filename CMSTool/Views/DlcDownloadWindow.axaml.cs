@@ -10,8 +10,10 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Media;
 using System.Net.Http;
+using System.Text;
 using System.Threading.Tasks;
 using static FGCMSTool.Managers.LocalizationManager;
 
@@ -81,13 +83,32 @@ namespace FGCMSTool.Views
 
         async void Begin(HashSet<DlcImage>? images)
         {
+            if (string.IsNullOrWhiteSpace(_saveDir)) throw new InvalidOperationException();
+
             int processed = 0;
             int failed = 0;
 
             if (Directory.Exists(_saveDir))
                 Directory.Delete(_saveDir, true);
 
-            Directory.CreateDirectory(_saveDir!);
+            Directory.CreateDirectory(_saveDir);
+
+            var logFile = Path.Combine(_saveDir, "output.log");
+
+            using var fs = new FileStream(logFile, FileMode.Create);
+            using var writer = new StreamWriter(fs, Encoding.UTF8);
+
+            _log.CollectionChanged += (sender, e) =>
+            {
+                if (e.NewItems != null)
+                {
+                    foreach (string item in e.NewItems)
+                    {
+                        writer.WriteLine($"[{DateTime.Now}] {item}");
+                        writer.Flush();
+                    }
+                }
+            };
 
             foreach (var img in images!)
             {
