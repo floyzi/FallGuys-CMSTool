@@ -48,7 +48,6 @@
     <PackageReference Include="Newtonsoft.Json" Version="13.0.4" />
     <PackageReference Include="SixLabors.ImageSharp" Version="4.1.2" />
     <PackageReference Include="System.Windows.Extensions" Version="10.0.12" />
-    <PackageReference Include="Xdg.Directories" Version="0.2.0" />
   </ItemGroup>
 
   <ItemGroup>
