@@ -229,7 +229,7 @@ namespace FGCMSTool.Views
                     ProgressState.Text = LocalizedString("task_dlc_cms_active_long");
                     dlcWindow.Closed += (_, _) =>
                     {
-                        if (!dlcWindow.isSuceed)
+                        if (!dlcWindow.Succeed)
                             ProgressState.Text = LocalizedString("task_dlc_cms_exit");
                         else
                             ProgressState.Text = LocalizedString("task_dlc_cms_done");

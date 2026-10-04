@@ -1,16 +1,18 @@
-﻿using System;
+﻿using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Threading;
+using MsBox.Avalonia.Base;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Media;
 using System.Net.Http;
 using System.Threading.Tasks;
-using Avalonia;
-using Avalonia.Controls;
-using Avalonia.Threading;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using static FGCMSTool.Managers.LocalizationManager;
 
 namespace FGCMSTool.Views
@@ -35,9 +37,9 @@ namespace FGCMSTool.Views
             public DlcItem? DlcItem { get; set; }
         }
 
-        readonly ObservableCollection<string> log = [];
-        string? SaveDir = string.Empty;
-        public bool isSuceed = false;
+        readonly ObservableCollection<string> _log = [];
+        string? _saveDir = string.Empty;
+        public bool Succeed = false;
 
         public DlcWindow()
         {
@@ -58,15 +60,15 @@ namespace FGCMSTool.Views
             MainContent.Margin = new Thickness(0, 25, 0, 25);
 #endif
 
-            LogsControl.ItemsSource = log;
+            LogsControl.ItemsSource = _log;
 
             Loaded += (sender, e) =>
             {
-                SaveDir = savePath;
+                _saveDir = savePath;
 
                 if (dlcImages == null)
                 {
-                    log.Add(LocalizedString("dlc_cms_null_dlc"));
+                    _log.Add(LocalizedString("dlc_cms_null_dlc"));
                     return;
                 }
 
@@ -82,26 +84,26 @@ namespace FGCMSTool.Views
             int processed = 0;
             int failed = 0;
 
-            if (Directory.Exists(SaveDir))
-                Directory.Delete(SaveDir, true);
+            if (Directory.Exists(_saveDir))
+                Directory.Delete(_saveDir, true);
 
-            Directory.CreateDirectory(SaveDir!);
+            Directory.CreateDirectory(_saveDir!);
 
             foreach (var img in images!)
             {
                 if (img?.DlcItem?.Base == null || img.DlcItem?.Path == null)
                     continue;
 
-                log.Add(LocalizedString("dlc_cms_downloading", [processed + 1, img.Id!]));
+                _log.Add(LocalizedString("dlc_cms_downloading", [processed + 1, img.Id!]));
 
                 try
                 {
                     await GetImage($"{img.DlcItem.Base}{img.DlcItem.Path}", img.Id);
-                    log[^1] += $" [{LocalizedString("dlc_cms_saved")}]";
+                    _log[^1] += $" [{LocalizedString("dlc_cms_saved")}]";
                 }
                 catch
                 {
-                    log[^1] += $" [{LocalizedString("dlc_cms_failed")}]";
+                    _log[^1] += $" [{LocalizedString("dlc_cms_failed")}]";
                     failed++;
                 }
 
@@ -115,8 +117,9 @@ namespace FGCMSTool.Views
                 });
             }
 
-            log.Add(LocalizedString("dlc_cms_done"));
-            isSuceed = true;
+            _log.Add(LocalizedString("dlc_cms_done"));
+            Succeed = true;
+
 #if RELEASE_WIN_X64 || DEBUG
             SystemSounds.Exclamation.Play();
 #endif
@@ -124,14 +127,34 @@ namespace FGCMSTool.Views
 
         async Task GetImage(string? url, string? dlcName)
         {
+            if (string.IsNullOrEmpty(url)) return;
+
+            var ext = Path.GetExtension(url);
             using var client = new HttpClient();
-            var response = await client.GetAsync(url);
+            var response = await client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);
 
             response.EnsureSuccessStatusCode();
 
-            byte[] data = await response.Content.ReadAsByteArrayAsync();
+            var stream = await response.Content.ReadAsStreamAsync();
 
-            await File.WriteAllBytesAsync(Path.Combine(SaveDir!, $"{dlcName}.png"), data);
+            var path = Path.Combine(_saveDir!, $"{(string.IsNullOrWhiteSpace(dlcName) ? Guid.NewGuid() : dlcName)}{(string.IsNullOrWhiteSpace(ext) ? ".jpeg" : ext)}");
+
+            await using var output = File.Create(path);
+            await stream.CopyToAsync(output);
+
+            if (response.Content.Headers.LastModified.HasValue)
+            {
+                var lastMod = response.Content.Headers.LastModified.Value;
+                _ = new FileInfo(path)
+                {
+                    LastAccessTime = lastMod.DateTime,
+                    LastAccessTimeUtc = lastMod.UtcDateTime,
+                    LastWriteTime = lastMod.DateTime,
+                    LastWriteTimeUtc = lastMod.UtcDateTime,
+                    CreationTime = lastMod.DateTime,
+                    CreationTimeUtc = lastMod.UtcDateTime
+                };
+            }
         }
     }
 }
