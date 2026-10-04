@@ -21,6 +21,8 @@ namespace FGCMSTool.Views
 {
     public partial class DlcWindow : Window
     {
+        const int MAX_TRIES = 3;
+        const int RETRY_DELAY = 1000;
         class DlcItem
         {
             [JsonProperty("path")]
@@ -115,16 +117,28 @@ namespace FGCMSTool.Views
                 if (img?.DlcItem?.Base == null || img.DlcItem?.Path == null)
                     continue;
 
-                _log.Add(LocalizedString("dlc_cms_downloading", [processed + 1, img.Id!]));
-
                 try
                 {
-                    await GetImage($"{img.DlcItem.Base}{img.DlcItem.Path}", img.Id);
-                    _log[^1] += $" [{LocalizedString("dlc_cms_saved")}]";
+                    for (var att = 1; att <= MAX_TRIES; att++)
+                    {
+                        _log.Add(LocalizedString("dlc_cms_downloading", [processed + 1, img.Id!, att, MAX_TRIES]));
+
+                        try
+                        {
+                            await GetImage($"{img.DlcItem.Base}{img.DlcItem.Path}", img.Id);
+                            _log[^1] += $" [{LocalizedString("dlc_cms_saved")}]";
+                            break;
+                        }
+                        catch
+                        {
+                            if (att == MAX_TRIES) throw;
+                            await Task.Delay(RETRY_DELAY);
+                        }
+                    }
                 }
-                catch
+                catch (Exception e)
                 {
-                    _log[^1] += $" [{LocalizedString("dlc_cms_failed")}]";
+                    _log[^1] += $" [{LocalizedString("dlc_cms_failed")}]\n{e.Message}";
                     failed++;
                 }
 

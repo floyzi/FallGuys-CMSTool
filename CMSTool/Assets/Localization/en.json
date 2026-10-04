@@ -81,7 +81,7 @@
     "picker_cms_dlc": "{ref:picker_decode}",
     "dlc_cms": "{ref:title} - Images Download",
     "dlc_cms_tip": "You can close this window if you want to stop download process",
-    "dlc_cms_downloading": "{0}: Downloading \"{1}\"...",
+    "dlc_cms_downloading": "{0}: Downloading \"{1}\" ({2}/{3})...",
     "dlc_cms_saved": "Saved",
     "dlc_cms_failed": "Failed",
     "dlc_cms_progress": "{0} / {1} Done - Failed: {2} ({3:0}%)",
