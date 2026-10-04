@@ -219,15 +219,17 @@ namespace FGCMSTool.Views
             try
             {
                 ProgressState.Text = LocalizedString("task_dlc_cms_active");
-
-                string dirName = isV2 ? "content_v2" : "content_v1";
                 var outputJson = GetDecryptedContentBytes(cmsPath!, Encoding.UTF8.GetBytes(SettingsManager.Settings!.SavedSettings!.XorKey!), isV2);
 
                 Dictionary<string, object>? cmsJson = JsonConvert.DeserializeObject<Dictionary<string, object>>(Encoding.UTF8.GetString(outputJson));
                 if (cmsJson != null && cmsJson.TryGetValue("dlc_images", out object? value) && value is JArray)
                 {
+                    var name = $"images_{Guid.NewGuid()}";
+                    if (cmsJson.TryGetValue("_meta", out var meta) && meta is JObject metaObj && metaObj.TryGetValue("_content_version", out var cmsVer))
+                        name = $"images_{cmsVer}";
+
                     var cts = new CancellationTokenSource();
-                    var dlcWindow = new DlcWindow(value as JArray, Path.Combine(DownloadedDlcImagesDir, dirName), cts);
+                    var dlcWindow = new DlcWindow(value as JArray, Path.Combine(DownloadedDlcImagesDir, name), cts);
                     ProgressState.Text = LocalizedString("task_dlc_cms_active_long");
                     dlcWindow.Closed += (_, _) =>
                     {
